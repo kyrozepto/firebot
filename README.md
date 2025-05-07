@@ -22,8 +22,8 @@ A computer vision fire and smoke detection system that controls a robot to navig
 
 1. Clone this repository
    ```
-   git clone https://github.com/yourusername/firebot_nav.git
-   cd firebot_nav
+   git clone https://github.com/kyrozepto/firebot.git
+   cd firebot
    ```
 
 2. Create a virtual environment
@@ -64,7 +64,7 @@ A computer vision fire and smoke detection system that controls a robot to navig
      ```python
      MODEL_PATH = 'yolov8n-200e-v0.2.pt'
      FIREBASE_CRED_PATH = 'serviceAccountKey.json'
-     FIREBASE_DB_URL = 'https://your-project-id.firebasedatabase.app'
+     FIREBASE_DB_URL = 'https://project-id.firebasedatabase.app'
      FIREBASE_COMMAND_PATH = '/firebot/command'
      ```
 
