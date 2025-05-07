@@ -26,6 +26,3 @@ serviceAccountKey.json
 
 # PyCharm
 .idea/
-
-# Model files
-*.pt
