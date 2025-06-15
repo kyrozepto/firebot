@@ -103,3 +103,7 @@ python navigate2depth.py
   - `yolov8n-seg.pt`: Segmentation model
   - `yolo11n-seg.pt`: Alternative segmentation model
   - `yolov8n-200e-v0.2.pt`: Fine tuned model variant for fire and smoke object
+ 
+## Related Paper
+Vision Transformers for Dense Prediction
+https://arxiv.org/abs/2103.13413
