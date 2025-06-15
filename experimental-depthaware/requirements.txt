@@ -1,0 +1,9 @@
+opencv-python
+torch
+numpy
+pyyaml
+ultralytics
+firebase-admin
+transformers
+Pillow
+asyncio
