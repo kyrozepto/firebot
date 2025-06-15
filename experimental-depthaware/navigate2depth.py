@@ -18,6 +18,8 @@ def load_config(config_path='config.yaml'):
     try:
         with open(config_path, 'r') as file:
             config = yaml.safe_load(file)
+        # This will be used to specifically name fire and smoke.
+        # Other classes will be generically named 'Class_ID'.
         config['class_names'] = {
             str(config['class_ids']['fire']): 'Fire',
             str(config['class_ids']['smoke']): 'Smoke',
@@ -66,13 +68,13 @@ def initialize_firebase(cred_path, db_url):
 
 # --- Model Loading ---
 def load_yolo_model(model_path):
-    """Loads the YOLOv8 model."""
+    """Loads a YOLOv8 model."""
     try:
         model = YOLO(model_path)
         print(f"YOLO model loaded successfully from {model_path}.")
         return model
     except Exception as e:
-        print(f"Error loading YOLO model: {e}")
+        print(f"Error loading YOLO model from {model_path}: {e}")
         return None
 
 def initialize_depth_model(model_name, device):
@@ -97,7 +99,7 @@ def get_median_depth_in_box(depth_map, box):
     depth_roi = depth_map[y1:y2, x1:x2]
     return np.median(depth_roi) if depth_roi.size > 0 else 0
 
-# MODIFIED: This function now inverts the depth to get a real distance metric.
+# This function remains unchanged and works for any set of YOLO results.
 def process_frame_detections(yolo_results, depth_map, config):
     """Processes YOLO results to create a structured list of detected objects with depth."""
     detected_objects = []
@@ -113,47 +115,45 @@ def process_frame_detections(yolo_results, depth_map, config):
             cls = int(box.cls[0])
             obj_box = box.xyxy[0]
             
-            # Get the raw inverse depth value from the model
             raw_depth_value = get_median_depth_in_box(depth_map, obj_box)
             
-            # --- CRITICAL FIX: Invert the raw value to get a distance metric ---
-            # We use a scaling factor to bring the distances into a nice range.
-            # You can adjust the 25000 factor if needed.
             distance_metric = 0
             if raw_depth_value > 0:
                 distance_metric = 25000 / raw_depth_value
             
             detected_objects.append({
                 'class_id': cls,
-                'class_name': config['class_names'].get(str(cls), f'Class_{cls}'),
+                'class_name': config['class_names'].get(str(cls), f'Obstacle_{cls}'), # Generic name for non-fire/smoke
                 'center_x': (obj_box[0] + obj_box[2]) / 2,
                 'confidence': conf,
                 'box': obj_box,
-                'raw_depth': raw_depth_value, # Keep for debugging if needed
-                'distance_metric': distance_metric # Use this for all logic now
+                'raw_depth': raw_depth_value,
+                'distance_metric': distance_metric
             })
             
-    # CRITICAL FIX: Sort by the new distance_metric, ascending (closest first).
-    detected_objects.sort(key=lambda x: x['distance_metric'])
+    # NOTE: We will sort the FINAL combined list in the main loop.
     return detected_objects
 
-# MODIFIED: This function now uses the intuitive distance_metric.
+# This function remains unchanged. It works based on class IDs.
 def get_robot_instruction_modified(detected_objects, frame_width, config):
     """
     Determines the robot's command based on a priority system using an intuitive distance metric.
     """
+    # The list is already sorted by distance, so the first elements are the closest.
     fire_targets = [obj for obj in detected_objects if obj['class_id'] == config['class_ids']['fire']]
+    
+    # All non-fire/smoke objects are considered obstacles.
     obstacles = [obj for obj in detected_objects if obj['class_id'] not in [config['class_ids']['fire'], config['class_ids']['smoke']]]
+    
     safe_dist_threshold = config['depth_model']['safe_distance_threshold']
 
     # --- Priority 1: Immediate Obstacle Avoidance ---
-    # Logic is now more intuitive: is the distance LESS THAN the threshold?
     if obstacles and obstacles[0]['distance_metric'] < safe_dist_threshold:
         closest_obstacle = obstacles[0]
         if closest_obstacle['center_x'] < frame_width / 2:
-            return config['commands']['right'], f"AVOID: Obstacle on Left ({closest_obstacle['class_name']})"
+            return config['commands']['right'], f"AVOID: {closest_obstacle['class_name']} on Left"
         else:
-            return config['commands']['left'], f"AVOID: Obstacle on Right ({closest_obstacle['class_name']})"
+            return config['commands']['left'], f"AVOID: {closest_obstacle['class_name']} on Right"
 
     # --- Priority 2: Target (Fire) Navigation ---
     if fire_targets:
@@ -175,17 +175,10 @@ def get_robot_instruction_modified(detected_objects, frame_width, config):
     # --- Priority 4: Default to Stop ---
     return config['commands']['stop'], "STOP: Path blocked or no target"
 
-# --- Visualization ---
-# MODIFIED: This function now uses the intuitive distance_metric.
+# --- Visualization (No changes needed in these functions) ---
 def get_world_coords(obj, frame_width, fov_degrees):
-    """
-    Projects a detected object from image space to a top-down world coordinate system.
-    """
-    # Use the new distance_metric for forward distance
     forward_distance = obj['distance_metric']
-    if forward_distance <= 0:
-        return None
-        
+    if forward_distance <= 0: return None
     camera_center_x = frame_width / 2
     pixel_offset = obj['center_x'] - camera_center_x
     fov_radians = math.radians(fov_degrees)
@@ -193,22 +186,17 @@ def get_world_coords(obj, frame_width, fov_degrees):
     lateral_distance = (pixel_offset * forward_distance) / focal_length
     return (lateral_distance, forward_distance)
 
-# MODIFIED: This function now correctly scales the map.
-def create_top_down_map(detected_objects, frame_width, config):
-    """Creates a 2D top-down map visualization of detected objects."""
+def create_top_down_map(detected_objects, frame_width, config, map_scale):
     map_size = (500, 500)
     map_image = np.zeros((map_size[1], map_size[0], 3), dtype=np.uint8)
     map_config = config['map_view']
-    map_scale = map_config['scale']
-    
     robot_x, robot_y = map_size[0] // 2, map_size[1] - 30
     pts = np.array([[robot_x, robot_y - 10], [robot_x - 10, robot_y + 10], [robot_x + 10, robot_y + 10]], np.int32)
     cv2.polylines(map_image, [pts], isClosed=True, color=(0, 255, 0), thickness=2)
     cv2.putText(map_image, "Robot", (robot_x - 25, robot_y + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
-    # Draw grid lines based on the new distance metric
     for i in range(1, 10):
-        dist_val = i * 20 # Represents 20, 40, 60... units of distance
+        dist_val = i * 20 
         y_pos = robot_y - int(dist_val * map_scale)
         if y_pos < 0: break
         cv2.line(map_image, (0, y_pos), (map_size[0], y_pos), (50, 50, 50), 1)
@@ -227,30 +215,23 @@ def create_top_down_map(detected_objects, frame_width, config):
             cv2.putText(map_image, obj['class_name'], (map_pixel_x + 7, map_pixel_y + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
 
     cv2.putText(map_image, "Top-Down Map", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+    cv2.putText(map_image, f"Scale: {map_scale:.1f} (E/Q=Zoom)", (10, 45), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
     return map_image
 
 def visualize_depth(depth_map, frame_height, frame_width):
-    """Visualizes the depth map with a colormap."""
     min_val, max_val = depth_map.min(), depth_map.max()
-    if max_val > min_val:
-      depth_vis = (depth_map - min_val) / (max_val - min_val) * 255.0
-    else:
-      depth_vis = np.zeros_like(depth_map)
+    if max_val > min_val: depth_vis = (depth_map - min_val) / (max_val - min_val) * 255.0
+    else: depth_vis = np.zeros_like(depth_map)
     depth_vis = depth_vis.astype(np.uint8)
     return cv2.applyColorMap(depth_vis, cv2.COLORMAP_MAGMA)
 
-# MODIFIED: This function now displays the intuitive distance metric.
 def visualize_objects(frame, detected_objects, config):
-    """Visualize detected objects with their bounding boxes and info."""
     overlay = frame.copy()
     for obj in detected_objects:
         x1, y1, x2, y2 = map(int, obj['box'])
-        box_color = (0, 0, 255) if obj['class_id'] == config['class_ids']['fire'] else (0, 255, 0)
+        box_color = (0, 0, 255) if obj['class_id'] == config['class_ids']['fire'] else (255, 165, 0)
         cv2.rectangle(overlay, (x1, y1), (x2, y2), box_color, 2)
-        
-        # Display the new, intuitive distance metric
         info_text = f"{obj['class_name']}: {obj['distance_metric']:.1f}m"
-        
         (w, h), _ = cv2.getTextSize(info_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
         cv2.rectangle(overlay, (x1, y1 - h - 10), (x1 + w, y1), box_color, -1)
         cv2.putText(overlay, info_text, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
@@ -266,8 +247,13 @@ async def main():
     if not initialize_firebase(config['firebase']['cred_path'], config['firebase']['db_url']):
         exit("Firebase initialization failed. Exiting.")
 
-    yolo_model = load_yolo_model(config['yolo']['model_path'])
-    if yolo_model is None: exit("YOLO model loading failed. Exiting.")
+    # --- MODIFIED: Load two YOLO models ---
+    print("--- Loading YOLO Models ---")
+    yolo_obstacle_model = load_yolo_model(config['yolo']['obstacle_model_path'])
+    yolo_firesmoke_model = load_yolo_model(config['yolo']['fire_smoke_model_path'])
+    if yolo_obstacle_model is None or yolo_firesmoke_model is None:
+        exit("One or more YOLO models failed to load. Exiting.")
+    print("---------------------------")
 
     depth_model, depth_processor = initialize_depth_model(config['depth_model']['name'], device)
     if depth_model is None: exit("Depth model loading failed. Exiting.")
@@ -286,6 +272,8 @@ async def main():
     current_instruction_code = -1 
     await send_command_to_firebase_async(config['commands']['stop'], config['firebase']['command_path'])
 
+    current_map_scale = config['map_view']['scale']
+    
     try:
         while True:
             ret, frame = await loop.run_in_executor(None, cap.read)
@@ -293,7 +281,7 @@ async def main():
                 print("End of video stream or error reading frame.")
                 break
 
-            # --- Perception Stage ---
+            # --- Perception Stage (Depth) ---
             image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             inputs = depth_processor(images=image, return_tensors="pt").to(device)
             with torch.no_grad():
@@ -304,14 +292,25 @@ async def main():
                     mode="bicubic", align_corners=False,
                 )
             depth_map = prediction.squeeze().cpu().numpy()
-            yolo_results = yolo_model(frame, verbose=False, conf=config['yolo']['model_confidence'])
             
-            # --- Centralized Processing ---
-            detected_objects = process_frame_detections(yolo_results, depth_map, config)
+            # --- MODIFIED: Perception Stage (YOLO - Two Models) ---
+            # Run both models on the same frame
+            obstacle_results = yolo_obstacle_model(frame, verbose=False, conf=config['yolo']['model_confidence'])
+            firesmoke_results = yolo_firesmoke_model(frame, verbose=False, conf=config['yolo']['model_confidence'])
+
+            # --- MODIFIED: Centralized Processing ---
+            # Process each set of results and combine them into one list
+            detected_obstacles = process_frame_detections(obstacle_results, depth_map, config)
+            detected_firesmoke = process_frame_detections(firesmoke_results, depth_map, config)
+            all_detected_objects = detected_obstacles + detected_firesmoke
+
+            # CRITICAL: Sort the final combined list by distance so the closest objects are first
+            all_detected_objects.sort(key=lambda x: x['distance_metric'])
 
             # --- Decision Stage ---
+            # The decision function receives the final, sorted list of all objects
             instruction_code, instruction_label = get_robot_instruction_modified(
-                detected_objects, frame_width, config)
+                all_detected_objects, frame_width, config)
 
             # --- Actuation Stage ---
             current_time = time.time()
@@ -322,7 +321,8 @@ async def main():
                 print(f"[{time.strftime('%H:%M:%S')}] Command: {instruction_label} ({instruction_code})")
             
             # --- Visualization Stage ---
-            overlay = visualize_objects(frame, detected_objects, config)
+            # The visualization functions receive the final, sorted list of all objects
+            overlay = visualize_objects(frame, all_detected_objects, config)
             cv2.putText(overlay, f"CMD: {instruction_label}", (10, frame_height - 30), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2, cv2.LINE_AA)
             cv2.line(overlay, (int(frame_width * config['frame_division']['left_end']), 0), 
@@ -331,18 +331,22 @@ async def main():
                     (int(frame_width * config['frame_division']['right_start']), frame_height), (0,0,255), 1)
             
             depth_vis_colored = visualize_depth(depth_map, frame_height, frame_width)
-            
             panels = [overlay, depth_vis_colored]
             
             if config['map_view']['enabled']:
-                top_down_map = create_top_down_map(detected_objects, frame_width, config)
+                top_down_map = create_top_down_map(all_detected_objects, frame_width, config, current_map_scale)
                 map_resized = cv2.resize(top_down_map, (int(top_down_map.shape[1] * (frame_height / top_down_map.shape[0])), frame_height))
                 panels.append(map_resized)
             
             combined_frame = cv2.hconcat(panels)
             cv2.imshow("Firefighter Robot - Navigation View", combined_frame)
 
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('e'):
+                current_map_scale += 0.5
+            elif key == ord('q'):
+                current_map_scale = max(0.5, current_map_scale - 0.5)
+            elif key == 27: # ESC key
                 print("Exiting...")
                 break
     finally:

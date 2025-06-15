@@ -6,16 +6,19 @@ gpu:
 
 # YOLOv8 Models
 yolo:
-  model_path: 'yolov8n-seg.pt'
+  # Path to the standard YOLOv8 model for general obstacle detection (e.g., person, car, etc.)
+  obstacle_model_path: 'yolov8n.pt' 
+  
+  # Path to your specialized model for detecting fire and smoke
+  fire_smoke_model_path: 'yolov8n-200e-v0.2.pt' # <-- IMPORTANT: UPDATE THIS PATH
+
+  # Confidence thresholds remain the same for both models for simplicity
   model_confidence: 0.4
   segmentation_confidence: 0.25
 
 # Depth Estimation Model
 depth_model:
   name: 'Intel/dpt-swinv2-tiny-256'
-  # NEW: This is now a threshold on our calculated 'distance_metric'.
-  # Smaller value = closer. This represents how close an object can be before
-  # the robot must react. Start with a value like 20 and adjust.
   safe_distance_threshold: 20.0
 
 # Firebase Configuration
@@ -24,7 +27,8 @@ firebase:
   db_url: 'https://firebot-sfy832-default-rtdb.asia-southeast1.firebasedatabase.app'
   command_path: '/firebot/command'
 
-# Class IDs from your model
+# Class IDs from your specialized model
+# The standard model's classes (0-79) will be handled automatically.
 class_ids:
   fire: 80
   smoke: 81
@@ -51,7 +55,4 @@ command_interval: 1.0
 map_view:
   enabled: 1
   camera_fov: 65.0
-  # NEW: This now scales our new 'distance_metric'.
-  # You may need to adjust this again. If objects are too clustered, increase it.
-  # If they are too spread out, decrease it. Start with 3.0.
   scale: 3.0
