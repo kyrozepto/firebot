@@ -2,13 +2,14 @@
 
 # YOLOv8 Segmentation Models
 yolo:
-  model_path: 'yolo11n-seg.pt'
+  model_path: 'yolov8n-seg.pt'
   model_confidence: 0.4
   segmentation_confidence: 0.25
 
 # DepthAnythingV2 Model
 depth_model:
-  name: 'depth-anything/Depth-Anything-V2-Small-hf'
+  # name: 'depth-anything/Depth-Anything-V2-Small-hf'
+  name: 'Intel/dpt-swinv2-tiny-256'
   safe_distance_threshold: 150
 
 # Firebase Configuration
@@ -19,8 +20,8 @@ firebase:
 
 # Class IDs from your model
 class_ids:
-  fire: 0
-  smoke: 1
+  fire: 80
+  smoke: 81
 
 # Instruction codes
 commands:
