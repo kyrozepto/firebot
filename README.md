@@ -2,7 +2,7 @@
 
 This project features an experimental machine learning system that equips robots with depth perception for autonomous firefighting. It integrates YOLOv8 for real-time fire detection, dense vision transformers for depth estimation, and autonomous navigation to effectively respond to incidents.
 
-![Demonstration of the firebot model](assets/my_animation.gif)
+![Demonstration of the firebot model](firebot.gif)
 
 ## Architecture Overview
 
