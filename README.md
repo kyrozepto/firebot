@@ -2,12 +2,17 @@
 
 This project implements an intelligent, depth-aware robotic system for autonomous firefighting. The system leverages a dual-YOLOv8 architecture for simultaneous fire and obstacle detection, a Vision Transformer (ViT) model for real-time depth perception, and a priority-based navigation algorithm to safely and effectively respond to fire incidents.
 
-![Demonstration of the firebot model](firebot.gif)
-![Offline Demonstration with BNUv2](onsite_demo.gif)
+*Model demonstration:*
+
+<img src="firebot.gif" alt="Demonstration of the firebot model" width="800">
+
+<img src="onsite_demo.gif" alt="Offline Demonstration with BNUv2" width="350">
+
+*Useful links:*
 
 | Document         | Link                                                                                       |
 | --------------------- | ----------------------------------------------------------------------------------------- |
-| Proposal PKM-KC     | [PDF](./ets-eas_document/PKM-KC_Robot%20Pemadam%20Kebakaran%20BNU%20Gen%20II.PDF)                 |
+| Proposal PKM-KC     | [PDF](./ets-eas_document/PKM-KC_Robot%20Pemadam%20Kebakaran%20BNU%20Gen%20II.pdf)                |
 | Presentation Slide      | [PDF](./ets-eas_document/Slide_Robot%20Pemadam%20Kebakaran%20BNU%20Gen%20II.pdf)                  |
 | Project Plan      | [PDF](./ets-eas_document/Planner_Robot%20Pemadam%20Kebakaran%20BNU%20Gen%20II.pdf)                  |
 | Project Demo (video/image)      | [Google Drive](https://drive.google.com/drive/folders/1O5aWC1Q2IM5jjnCYymGzciidyFne0_Fe)                |
@@ -20,12 +25,6 @@ This project implements an intelligent, depth-aware robotic system for autonomou
 - [Directory Structure](#directory-structure)
 - [Prerequisites](#prerequisites)
 - [Setup Instructions](#setup-instructions)
-  - [1. Clone the Repository](#1-clone-the-repository)
-  - [2. Environment Setup](#2-environment-setup)
-  - [3. GPU Setup (Optional but Recommended)](#3-gpu-setup-optional-but-recommended)
-  - [4. Firebase Setup](#4-firebase-setup)
-  - [5. Model Setup](#5-model-setup)
-  - [6. Configuration](#6-configuration)
 - [Running the Project](#running-the-project)
 - [Acknowledgments](#acknowledgments)
 
@@ -100,7 +99,7 @@ robotic-firebot/
 ├── arduino/                 # Arduino firmware for motor control
 │   └── ...
 │
-├── document/                # Project proposal and presentation files
+├── ets-eas_document/        # Project proposal and presentation files
 │   └── ...
 │
 ├── ipynb/                   # Jupyter notebooks for experimentation
