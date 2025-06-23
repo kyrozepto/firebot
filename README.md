@@ -1,110 +1,122 @@
-# Firebot - Depth-Aware Firefighting Robots
+# `Firebot` Depth-Aware Firefighting Robot
 
-This project features an experimental machine learning system that equips robots with depth perception for autonomous firefighting. It integrates YOLOv8 for real-time fire detection, dense vision transformers for depth estimation, and autonomous navigation to effectively respond to incidents.
+This project implements an intelligent, depth-aware robotic system for autonomous firefighting. The system leverages a dual-YOLOv8 architecture for simultaneous fire and obstacle detection, a Vision Transformer (ViT) model for real-time depth perception, and a priority-based navigation algorithm to safely and effectively respond to fire incidents.
 
 ![Demonstration of the firebot model](firebot.gif)
+![Offline Demonstration with BNUv2](onsite_demo.gif)
 
-## Architecture Overview
+| Document         | Link                                                                                       |
+| --------------------- | ----------------------------------------------------------------------------------------- |
+| Proposal PKM-KC     | [PDF](./ets-eas_document/PKM-KC_Robot%20Pemadam%20Kebakaran%20BNU%20Gen%20II.PDF)                 |
+| Presentation Slide      | [PDF](./ets-eas_document/Slide_Robot%20Pemadam%20Kebakaran%20BNU%20Gen%20II.pdf)                  |
+| Project Plan      | [PDF](./ets-eas_document/Planner_Robot%20Pemadam%20Kebakaran%20BNU%20Gen%20II.pdf)                  |
+| Project Demo (video/image)      | [Google Drive](https://drive.google.com/drive/folders/1O5aWC1Q2IM5jjnCYymGzciidyFne0_Fe)                |
 
-The system architecture consists of several key components:
+## Table of Contents
 
-1. **Vision System**
-   - Primary YOLOv8 model for fire/smoke detection
-   - Secondary YOLOv8 model for depth estimation
-   - Depth-aware navigation system
-   - Real-time image processing pipeline
-
-2. **Control System**
-   - Autonomous navigation algorithms
-   - Motor control interface
-   - Sensor fusion system
-
-3. **Backend Integration**
-   - Firebase Realtime Database for data logging
-   - Remote monitoring capabilities
-   - Real-time alert system
-
-
-## Technology Stack
-
-### YOLOv8
-- [Ultralytics YOLOv8 Documentation](https://docs.ultralytics.com/)
-- Used for object detection and depth estimation
-- Custom fine-tuned model for fire/smoke detection
-
-### Dense Vision Transformers
-- [Dense Vision Transformer Paper](https://arxiv.org/abs/2203.09887)
-- Used for enhanced depth perception
-- Integration with YOLOv8 for improved accuracy
-
-### Firebase
-- Real-time database for logging and monitoring
-- Alert system integration
-- Remote control capabilities
+- [How It Works](#how-it-works)
+- [System Architecture](#system-architecture)
+- [Technology Stack](#technology-stack)
+- [Directory Structure](#directory-structure)
+- [Prerequisites](#prerequisites)
+- [Setup Instructions](#setup-instructions)
+  - [1. Clone the Repository](#1-clone-the-repository)
+  - [2. Environment Setup](#2-environment-setup)
+  - [3. GPU Setup (Optional but Recommended)](#3-gpu-setup-optional-but-recommended)
+  - [4. Firebase Setup](#4-firebase-setup)
+  - [5. Model Setup](#5-model-setup)
+  - [6. Configuration](#6-configuration)
+- [Running the Project](#running-the-project)
+- [Acknowledgments](#acknowledgments)
 
 ## How It Works
 
-The system runs two YOLOv8 models in parallel:
+The robot's operation is a continuous loop of Perception, Decision-making, and Action. It processes video frames in real-time to understand its environment and make intelligent navigation choices.
 
-1. **Fire Detection Model**
-   - Processes input frames for fire/smoke detection
-   - Provides bounding boxes and confidence scores
-   - Triggers alerts when fire is detected
+1.  **Perception - Seeing the World:**
+    *   The system captures a video frame.
+    *   A **Depth Estimation Model** (`Intel/dpt-swinv2-tiny-256`) analyzes the frame to create a detailed depth map, calculating how far away every point in the scene is.
+    *   Simultaneously, **two YOLOv8 models** run in parallel:
+        *   **Fire/Smoke Model (`yolov8n-200e-v0.2.pt`):** A custom-trained model that specifically identifies fire and smoke.
+        *   **Obstacle Model (`yolov8n.pt`):** A standard YOLOv8 model that detects general obstacles like people, furniture, etc.
 
-2. **Depth Estimation Model**
-   - Processes the same frames for depth information
-   - Provides depth maps for navigation
-   - Helps in obstacle avoidance
+2.  **Analysis - Understanding the Dangers:**
+    *   The system combines the results from all three models. For every object detected (whether fire or obstacle), it uses the depth map to calculate its real-world distance from the robot.
+    *   All detected objects are compiled into a single list, sorted by distance (closest first).
 
-The models work together to:
-- Detect fire incidents
-- Calculate safe navigation paths
-- Avoid obstacles
-- Log data to Firebase
-- Send real-time alerts
+3.  **Decision - Choosing the Next Move:**
+    *   A priority-based navigation algorithm analyzes the sorted list of objects to issue a command:
+        *   **Priority 1 (Avoidance):** If the *closest* object is an obstacle and is within the `safe_distance_threshold`, the robot will turn left or right to avoid it.
+        *   **Priority 2 (Targeting):** If there are no immediate obstacle threats, the robot will navigate towards the *closest* detected fire. It moves forward, left, or right to keep the fire centered in its view.
+        *   **Priority 3 (Exploration):** If no fire is detected but the path ahead is clear of obstacles, the robot moves forward to search for threats.
+        *   **Priority 4 (Halt):** If the path is blocked or a fire is too close, the robot stops to ensure safety.
 
+4.  **Action & Monitoring - Executing the Command:**
+    *   The chosen command (e.g., `forward`, `left`, `stop`) is sent to the **Firebase Realtime Database**.
+    *   The physical robot (controlled by an Arduino or similar microcontroller) listens to this database path and executes the corresponding motor command.
+    *   This entire process repeats, allowing for continuous, autonomous operation.
+
+## System Architecture
+
+The system is composed of three main modules:
+
+1.  **Vision & Perception Module**
+    *   **Dual YOLOv8 Engine:** For simultaneous fire, smoke, and obstacle detection.
+    *   **Depth Estimation Engine:** Uses `Intel/dpt-swinv2-tiny-256` for dense depth mapping.
+    *   **Data Fusion:** Combines detection boxes with depth data to locate objects in 3D space.
+
+2.  **Navigation & Control Module**
+    *   **Priority-Based Algorithm:** Determines the robot's next move based on a clear set of safety and mission rules.
+    *   **Command Generation:** Translates the decision into a simple command code (0: stop, 1: forward, 2: left, 3: right).
+
+3.  **Backend & Communication Module**
+    *   **Firebase Realtime Database:** Acts as the communication bridge between the Python brain and the robot's hardware.
+    *   **Remote Monitoring:** The system provides a real-time visual feed including the main camera view, a depth map visualization, and a top-down tactical map.
+
+## Technology Stack
+
+*   **Object Detection:** [Ultralytics YOLOv8](https://docs.ultralytics.com/)
+    *   Used for real-time detection of fire, smoke, and obstacles using two parallel models.
+*   **Depth Estimation:** [Hugging Face Transformers](https://huggingface.co/docs/transformers/index)
+    *   Employs the `Intel/dpt-swinv2-tiny-256` model, a state-of-the-art Depth Prediction Transformer.
+*   **Backend & Control:** [Firebase Realtime Database](https://firebase.google.com/docs/database)
+    *   Provides a simple, low-latency channel for sending navigation commands to the robot hardware.
 
 ## Directory Structure
 
 ```
 robotic-firebot/
 ├── python/
-│   ├── navigate2depth.py    # Main application file
-│   ├── config.yaml         # Configuration settings
-│   ├── requirements.txt    # Python dependencies
-│   ├── check_gpu.py       # GPU verification utility
-│   └── run_robot.bat      # Windows batch file for easy execution
+│   ├── navigate2depth.py    # Main application script
+│   ├── config.yaml          # All configuration settings
+│   ├── requirements.txt     # Python dependencies
+│   ├── check_gpu.py         # Utility to verify CUDA setup
+│   └── run_robot.bat        # Windows script for easy execution
 │
-├── artifacts/              # Old program
-│   └── ...                
+├── checkpoints/             # Directory for model weights
+│   ├── yolov8n.pt           # Standard obstacle detection model
+│   └── yolov8n-200e-v0.2.pt # Custom fire/smoke detection model
 │
-├── checkpoints/           # Model checkpoints and weights
+├── arduino/                 # Arduino firmware for motor control
 │   └── ...
 │
-├── arduino/              # Arduino firmware and control code
+├── document/                # Project proposal and presentation files
 │   └── ...
 │
-├── document/            # Proposal and presentation file
-│   ├── Slide_Robot Pemadam Kebakaran BNU Gen II.pdf
-│   └── PKM-KC_Robot Pemadam Kebakaran BNU Gen II.pdf
-│
-├── ipynb/              # Jupyter notebooks
+├── ipynb/                   # Jupyter notebooks for experimentation
 │   └── ...
 │
-└── README.md          # Project documentation
+├── serviceAccountKey.json   # Firebase service account key (place in root)
+│
+└── README.md                # This documentation file
 ```
-Model files:
-- `yolov8n.pt`: Base YOLOv8 Nano model
-- `yolov8n-seg.pt`: Yolov8 Segmentation model
-- `yolov8n-200e-v0.2.pt`: Custom model for fire and smoke detection
-
 
 ## Prerequisites
 
-- Python 3.8 or higher
-- CUDA-capable GPU (recommended for real-time performance)
-- Git
-- Firebase account
+*   Python 3.8+
+*   Git
+*   A Firebase project with Realtime Database enabled
+*   (Recommended) An NVIDIA GPU with CUDA and cuDNN installed for real-time performance
 
 ## Setup Instructions
 
@@ -112,141 +124,105 @@ Model files:
 
 ```bash
 git clone https://github.com/kyrozepto/robotic-firebot
-cd robotic-firebot/experimental-depthaware
+cd robotic-firebot
 ```
 
-### 2. Environment Setup
+### 2. Set Up a Python Environment
 
-#### Option A: Using Virtual Environment (Recommended)
+It is highly recommended to use a virtual environment.
 
 ```bash
-# Create a virtual environment
-python -m venv venv
+# Navigate into the python script directory
+cd python
 
-# Activate the virtual environment
+# Create and activate a virtual environment
+python -m venv venv
 # On Windows:
 venv\Scripts\activate
-# On Linux/Mac:
+# On macOS/Linux:
 source venv/bin/activate
 
-# Install dependencies
+# Install the required packages
 pip install -r requirements.txt
 ```
 
-#### Option B: Using Conda Environment
+### 3. GPU Acceleration (Recommended)
 
-```bash
-# Create a conda environment
-conda create -n firebot python=3.8
-conda activate firebot
+For real-time performance, a CUDA-enabled GPU is essential.
 
-# Install dependencies
-pip install -r requirements.txt
+1.  Install the [NVIDIA CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit-archive) that matches your driver version.
+2.  Install [cuDNN](https://developer.nvidia.com/cudnn).
+3.  Install PyTorch with CUDA support. Check the [PyTorch website](https://pytorch.org/get-started/locally/) for the correct command for your specific CUDA version. For CUDA 11.8, the command is:
+    ```bash
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+    ```
+4.  Verify the setup by running:
+    ```bash
+    python check_gpu.py
+    ```
+
+### 4. Download Models
+
+Download the required YOLOv8 model weights and place them in the `checkpoints/` directory at the root of the project.
+
+1.  `yolov8n.pt` (Standard model for obstacles)
+2.  `yolov8n-200e-v0.2.pt` (Your custom model for fire/smoke)
+
+Your `checkpoints` folder should look like this:
+```
+robotic-firebot/
+└── checkpoints/
+    ├── yolov8n.pt
+    └── yolov8n-200e-v0.2.pt
 ```
 
-### 3. GPU Setup (Optional but Recommended)
+### 5. Firebase Setup
 
-If you have a CUDA-capable GPU and want to use GPU acceleration:
-
-1. Install CUDA Toolkit (compatible with your GPU)
-2. Install cuDNN
-3. Install PyTorch with CUDA support:
-```bash
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-```
-
-To verify GPU availability, run:
-```bash
-python check_gpu.py
-```
-
-### 4. Firebase Setup
-
-1. Create a Firebase Project:
-   - Go to [Firebase Console](https://console.firebase.google.com/)
-   - Click "Add Project" and follow the setup wizard
-   - Enable Realtime Database in the Firebase Console
-
-2. Generate Service Account Key:
-   - Go to Project Settings > Service Accounts
-   - Click "Generate New Private Key"
-   - Save the JSON file as `ServiceAccountKey.json`
-   - Place it in the project root directory
-
-3. Configure Firebase Rules:
-   ```json
-   {
-     "rules": {
-       ".read": "auth != null",
-       ".write": "auth != null"
-     }
-   }
-   ```
-
-### 5. Model Setup
-
-#### Using Pre-trained Models
-1. Download required model files:
-   - yolov8n.pt (base model)
-   - yolov8n-seg.pt (segmentation model)
-   - yolov8n-200e-v0.2.pt (custom fire detection model)
-
-#### Fine-tuning Your Own Model
-1. Prepare your dataset:
-   - Collect fire/smoke images
-   - Label them using [LabelImg](https://github.com/tzutalin/labelImg) or similar tool
-   - Split into train/val/test sets
-
-2. Fine-tune YOLOv8:
-   ```bash
-   yolo train model=yolov8n.pt data=your_dataset.yaml epochs=200 imgsz=640
-   ```
-
-3. Export the model:
-   ```bash
-   yolo export model=path/to/best.pt format=onnx
-   ```
+1.  Go to the [Firebase Console](https://console.firebase.google.com/) and create a new project.
+2.  In your project, go to **Build > Realtime Database**, click "Create database", and start in **test mode** (you can secure the rules later).
+3.  In Project Settings (⚙️) > **Service Accounts**, click "Generate new private key".
+4.  A JSON file will be downloaded. **Rename it to `serviceAccountKey.json` and place it in the root `robotic-firebot/` directory.**
 
 ### 6. Configuration
 
-1. Configure settings in `config.yaml`:
-   ```yaml
-   # Example configuration
-   camera:
-     resolution: [640, 480]
-     fps: 30
-   
-   models:
-     detection:
-       path: "yolov8n-200e-v0.2.pt"
-       confidence: 0.5
-     depth:
-       path: "yolov8n-seg.pt"
-       confidence: 0.3
-   
-   firebase:
-     database_url: "your-database-url"
-     service_account: "ServiceAccountKey.json"
-   ```
+All settings are managed in the `python/config.yaml` file. Review it before running the script.
+
+| Setting | Description |
+| :--- | :--- |
+| `gpu.enabled` | `1` to use GPU, `0` for CPU. |
+| `yolo.obstacle_model_path` | Path to the standard YOLOv8 model for obstacle detection. |
+| `yolo.fire_smoke_model_path`| Path to your custom YOLOv8 model for fire/smoke detection. |
+| `yolo.model_confidence` | The minimum confidence score (0.0 to 1.0) to consider a detection valid. |
+| `depth_model.name` | The Hugging Face name of the depth estimation model. |
+| `depth_model.safe_distance_threshold` | The distance (in meters) at which the robot will prioritize obstacle avoidance. |
+| `firebase.cred_path` | Path to your Firebase service account key. The default `../serviceAccountKey.json` is correct if you follow the setup steps. |
+| `firebase.db_url` | The URL of your Firebase Realtime Database. |
+| `firebase.command_path` | The specific path within the database where commands will be written. |
+| `class_ids.fire` / `.smoke` | The class IDs for fire and smoke from your custom dataset. |
+| `video_source` | `0` for the default webcam, or a path to a video file (e.g., `"path/to/video.mp4"`). |
+| `map_view.enabled` | `1` to show the top-down map visualization, `0` to hide it. |
 
 ## Running the Project
 
-### Using the Batch File (Windows)
+Ensure you are in the `python/` directory and your virtual environment is activated.
 
-Simply run:
+#### On Windows (Easy Method)
+Simply double-click or run the batch file:
 ```bash
 run_robot.bat
 ```
 
-### Manual Execution
-
+#### On Any OS (Manual Method)
 ```bash
 python navigate2depth.py
 ```
 
+Press the `ESC` key in the display window to exit the program.
 
 ## Acknowledgments
 
-- [Ultralytics](https://github.com/ultralytics/ultralytics) for YOLOv8
-- [Firebase](https://firebase.google.com/) for backend services
-- [PyTorch](https://pytorch.org/) for deep learning framework
+* **Vision Transformers for Dense Prediction** by René Ranftl, Alexey Bochkovskiy, Vladlen Koltun, available at [https://arxiv.org/abs/2103.13413](https://arxiv.org/abs/2103.13413)
+* [Ultralytics](https://github.com/ultralytics/ultralytics)
+* [Hugging Face](https://huggingface.co/)
+* [Google Firebase](https://firebase.google.com/)
+* [PyTorch](https://pytorch.org/)
